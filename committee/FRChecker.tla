@@ -6,6 +6,8 @@ CONSTANT Blocks, Processes
 
 VARIABLES Blockchain1, Decided1, Profit1, NewBlock1, Valid1, Merit1, Blockchain2, Decided2, Profit2, NewBlock2, Valid2, Merit2, Rational
 
+vars2 == <<Blockchain2, Decided2, Profit2, NewBlock2, Valid2, Merit2>>
+
 G1 == INSTANCE Committee WITH Blockchain <- Blockchain1, Decided <- Decided1, NewBlock <- NewBlock1, Profit <- Profit1, Valid <- Valid1, Merit <- Merit1
 
 G2 == INSTANCE Committee WITH Blockchain <- Blockchain2, Decided <- Decided2, NewBlock <- NewBlock2, Profit <- Profit2, Valid <- Valid2, Merit <- Merit2
@@ -24,9 +26,9 @@ AddNewBlock(p,b) == /\ G1!AddNewBlock(p,b)
 
               
 Vote(p) == /\ G1!Vote(p,TRUE)
-           /\ IF p = Rational
-              THEN G2!Vote(p,FALSE)
-              ELSE G2!Vote(p,TRUE)
+           /\ \/ /\ p = Rational
+                 /\ UNCHANGED <<vars2>>
+              \/ G2!Vote(p,TRUE)
            /\ UNCHANGED <<Rational>>
 
               

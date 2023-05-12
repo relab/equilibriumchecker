@@ -520,12 +520,12 @@ Consensus(p) ==
  \/ UponQuorumOfPrevotesAny(p)
  \/ UponProposalInPrevoteOrCommitAndPrevote(p)
  \/ UponQuorumOfPrecommitsAny(p)
- \/ UponProposalInPrecommitNoDecision(p)
  
 Next ==
   \E p \in Corr:
     \/ InsertProposal(p)
     \/ Consensus(p)
+    \/ UponProposalInPrecommitNoDecision(p)
     \/ RewardAll(p)
     \* the actions below are not essential for safety, but added for completeness
     \*\/ OnTimeoutPropose(p)

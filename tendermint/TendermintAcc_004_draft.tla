@@ -81,7 +81,7 @@ IsValid(v) == v \in ValidValues
 
 \* the two thresholds that are used in the algorithm
 THRESHOLD1 == T + 1     \* at least one process is not faulty
-THRESHOLD2 == 2 * T + 1 \* a quorum when having N > 3 * T
+THRESHOLD2 == T + 1 \* a quorum when having N > 3 * T
 
 (********************* TYPE ANNOTATIONS FOR APALACHE **************************)
 
@@ -265,6 +265,7 @@ BroadcastPrecommit(pSrc, pRound, pId) ==
 \* lines 12-13
 StartRound(p, r) ==
    /\ step[p] /= "DECIDED" \* a decided process does not participate in consensus
+   /\ step[p] /= "REWARDED"
    /\ round' = [round EXCEPT ![p] = r]
    /\ step' = [step EXCEPT ![p] = "PROPOSE"] 
 
@@ -435,10 +436,9 @@ UponProposalInPrecommitNoDecision(p) ==
        /\ decision' = [decision EXCEPT ![p] = v] \* update the decision, line 51
     \* The original algorithm does not have 'DECIDED', but it increments the height.
     \* We introduced 'DECIDED' here to prevent the process from changing its decision.
-       /\ step' = [step EXCEPT ![p] = "DECIDED"]
-       /\ profit' = [profit EXCEPT ![p] = profit[p]+R]
+       /\ step' = [step EXCEPT ![p] = "DECIDED"]  
        /\ UNCHANGED <<round, lockedValue, lockedRound, validValue,
-                     validRound, msgsPropose, msgsPrevote, msgsPrecommit>>
+                     validRound, msgsPropose, msgsPrevote, msgsPrecommit, profit>>
        /\ action' = "UponProposalInPrecommitNoDecision"
                                                           
 \* the actions below are not essential for safety, but added for completeness
@@ -485,6 +485,15 @@ OnRoundCatchup(p) ==
  * e.g., when all processes decide. This is expected behavior, as we focus on safety.
  *)
  
+Reward(p) ==
+  /\ step[p] /= "REWARDED"
+  /\ step[p] = "DECIDED"
+  /\ profit' = [profit EXCEPT ![p] = profit[p]+R]
+  /\ step' = [step EXCEPT ![p] = "REWARDED"]
+  /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue,
+                      validRound, msgsPropose, msgsPrevote, msgsPrecommit,
+                      evidence, action, round>>
+ 
 Next ==
   \E p \in Corr:
     \/ InsertProposal(p)
@@ -498,6 +507,7 @@ Next ==
     \/ OnTimeoutPropose(p)
     \/ OnQuorumOfNilPrevotes(p)
     \/ OnRoundCatchup(p)
+    \/ Reward(p)
 
   
 (**************************** FORK SCENARIOS  ***************************)

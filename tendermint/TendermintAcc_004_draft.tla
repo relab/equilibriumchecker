@@ -118,7 +118,8 @@ VARIABLES
   evidence, \* the messages that were used by the correct processes to make transitions
   \* @type: ACTION;
   action,        \* we use this variable to see which action was taken
-  profit         \* we use this variable tto indicate the profit of each pricess
+  profit,         \* we use this variable to indicate the profit of each pricess
+  participated \* we use this variable to indicate whether ot not a process has voted
 
 (* to see a type invariant, check TendermintAccInv3 *)  
  
@@ -203,6 +204,7 @@ Init ==
     /\ step = [p \in Corr |-> "PROPOSE"]
     /\ decision = [p \in Corr |-> NilValue]
     /\ profit = [p \in Corr |-> 0]
+    /\ participated = [p \in Corr |-> 0]
     /\ lockedValue = [p \in Corr |-> NilValue]
     /\ lockedRound = [p \in Corr |-> NilRound]
     /\ validValue = [p \in Corr |-> NilValue]
@@ -287,7 +289,7 @@ InsertProposal(p) ==
           ELSE v 
       IN BroadcastProposal(p, round[p], proposal, validRound[p])
   /\ UNCHANGED <<evidence, round, decision, lockedValue, lockedRound,
-                validValue, step, validRound, msgsPrevote, msgsPrecommit, profit>>
+                validValue, step, validRound, msgsPrevote, msgsPrecommit, profit, participated>>
   /\ action' = "InsertProposal"
 
 \* lines 22-27
@@ -315,6 +317,7 @@ UponProposalInPropose(p) ==
        BroadcastPrevote(p, round[p], mid) \* lines 24-26
     /\ step' = [step EXCEPT ![p] = "PREVOTE"]
     /\ profit' = [profit EXCEPT ![p] = profit[p]-Cost]
+    /\ participated' = [participated EXCEPT ![p] = participated[p]+1]
     /\ UNCHANGED <<round, decision, lockedValue, lockedRound,
                    validValue, validRound, msgsPropose, msgsPrecommit>>
     /\ action' = "UponProposalInPropose"
@@ -346,6 +349,7 @@ UponProposalInProposeAndPrevote(p) ==
        BroadcastPrevote(p, round[p], mid) \* lines 24-26
     /\ step' = [step EXCEPT ![p] = "PREVOTE"]
     /\ profit' = [profit EXCEPT ![p] = profit[p]-Cost]
+    /\ participated' = [participated EXCEPT ![p] = participated[p]+1]
     /\ UNCHANGED <<round, decision, lockedValue, lockedRound,
                    validValue, validRound, msgsPropose, msgsPrecommit>>
     /\ action' = "UponProposalInProposeAndPrevote"
@@ -362,6 +366,7 @@ UponQuorumOfPrevotesAny(p) ==
       /\ BroadcastPrecommit(p, round[p], NilValue)
       /\ step' = [step EXCEPT ![p] = "PRECOMMIT"]
       /\ profit' = [profit EXCEPT ![p] = profit[p]-Cost]
+      /\ participated' = [participated EXCEPT ![p] = participated[p]+1]
       /\ UNCHANGED <<round, decision, lockedValue, lockedRound,
                     validValue, validRound, msgsPropose, msgsPrevote>>
       /\ action' = "UponQuorumOfPrevotesAny"
@@ -392,8 +397,9 @@ UponProposalInPrevoteOrCommitAndPrevote(p) ==
           /\ BroadcastPrecommit(p, round[p], Id(v))
           /\ step' = [step EXCEPT ![p] = "PRECOMMIT"]
           /\ profit' = [profit EXCEPT ![p] = profit[p]-Cost]
+          /\ participated' = [participated EXCEPT ![p] = participated[p]+1]
         ELSE
-          UNCHANGED <<lockedValue, lockedRound, msgsPrecommit, step, profit>>
+          UNCHANGED <<lockedValue, lockedRound, msgsPrecommit, step, profit, participated>>
       \* lines 42-43
     /\ validValue' = [validValue EXCEPT ![p] = v]
     /\ validRound' = [validRound EXCEPT ![p] = round[p]]
@@ -411,7 +417,7 @@ UponQuorumOfPrecommitsAny(p) ==
       /\ round[p] + 1 \in Rounds
       /\ StartRound(p, round[p] + 1)   
       /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue,
-                    validRound, msgsPropose, msgsPrevote, msgsPrecommit, profit>>
+                    validRound, msgsPropose, msgsPrevote, msgsPrecommit, profit, participated>>
       /\ action' = "UponQuorumOfPrecommitsAny"
                      
 \* lines 49-54        
@@ -438,7 +444,7 @@ UponProposalInPrecommitNoDecision(p) ==
     \* We introduced 'DECIDED' here to prevent the process from changing its decision.
        /\ step' = [step EXCEPT ![p] = "DECIDED"]  
        /\ UNCHANGED <<round, lockedValue, lockedRound, validValue,
-                     validRound, msgsPropose, msgsPrevote, msgsPrecommit, profit>>
+                     validRound, msgsPropose, msgsPrevote, msgsPrecommit, profit, participated>>
        /\ action' = "UponProposalInPrecommitNoDecision"
                                                           
 \* the actions below are not essential for safety, but added for completeness
@@ -450,6 +456,7 @@ OnTimeoutPropose(p) ==
   /\ BroadcastPrevote(p, round[p], NilValue)
   /\ step' = [step EXCEPT ![p] = "PREVOTE"]
   /\ profit' = [profit EXCEPT ![p] = profit[p]-Cost]
+  /\ participated' = [participated EXCEPT ![p] = participated[p]+1]
   /\ UNCHANGED <<round, lockedValue, lockedRound, validValue,
                 validRound, decision, evidence, msgsPropose, msgsPrecommit>>
   /\ action' = "OnTimeoutPropose"
@@ -463,6 +470,7 @@ OnQuorumOfNilPrevotes(p) ==
     /\ BroadcastPrecommit(p, round[p], Id(NilValue))
     /\ step' = [step EXCEPT ![p] = "PRECOMMIT"]
     /\ profit' = [profit EXCEPT ![p] = profit[p]-Cost]
+    /\ participated' = [participated EXCEPT ![p] = participated[p]+1]
     /\ UNCHANGED <<round, lockedValue, lockedRound, validValue,
                   validRound, decision, msgsPropose, msgsPrevote>>
     /\ action' = "OnQuorumOfNilPrevotes"
@@ -477,7 +485,7 @@ OnRoundCatchup(p) ==
         /\ evidence' = MyEvidence \union evidence
         /\ StartRound(p, r)
         /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue,
-                      validRound, msgsPropose, msgsPrevote, msgsPrecommit, profit>>
+                      validRound, msgsPropose, msgsPrevote, msgsPrecommit, profit, participated>>
         /\ action' = "OnRoundCatchup"
 
 (*
@@ -485,29 +493,44 @@ OnRoundCatchup(p) ==
  * e.g., when all processes decide. This is expected behavior, as we focus on safety.
  *)
  
-Reward(p) ==
+RewardAll(p) ==
   /\ step[p] /= "REWARDED"
   /\ step[p] = "DECIDED"
+  /\ \A pr \in Corr: step[pr] = "DECIDED" \/ step[pr] = "REWARDED"
   /\ profit' = [profit EXCEPT ![p] = profit[p]+R]
   /\ step' = [step EXCEPT ![p] = "REWARDED"]
   /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue,
                       validRound, msgsPropose, msgsPrevote, msgsPrecommit,
-                      evidence, action, round>>
+                      evidence, action, round, participated>>
+                      
+RewardVoters(p) == 
+  /\ step[p] /= "REWARDED"
+  /\ step[p] = "DECIDED"
+  /\ \A pr \in Corr: step[pr] = "DECIDED" \/ step[pr] = "REWARDED"
+  /\ participated[p] > 0
+  /\ profit' = [profit EXCEPT ![p] = profit[p]+R]
+  /\ step' = [step EXCEPT ![p] = "REWARDED"]
+  /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue,
+                      validRound, msgsPropose, msgsPrevote, msgsPrecommit,
+                      evidence, action, round, participated>>
+                      
+Consensus(p) == 
+ \/ UponProposalInPropose(p)
+ \/ UponProposalInProposeAndPrevote(p)
+ \/ UponQuorumOfPrevotesAny(p)
+ \/ UponProposalInPrevoteOrCommitAndPrevote(p)
+ \/ UponQuorumOfPrecommitsAny(p)
+ \/ UponProposalInPrecommitNoDecision(p)
  
 Next ==
   \E p \in Corr:
     \/ InsertProposal(p)
-    \/ UponProposalInPropose(p)
-    \/ UponProposalInProposeAndPrevote(p)
-    \/ UponQuorumOfPrevotesAny(p)
-    \/ UponProposalInPrevoteOrCommitAndPrevote(p)
-    \/ UponQuorumOfPrecommitsAny(p)
-    \/ UponProposalInPrecommitNoDecision(p)
+    \/ Consensus(p)
+    \/ RewardAll(p)
     \* the actions below are not essential for safety, but added for completeness
-    \/ OnTimeoutPropose(p)
-    \/ OnQuorumOfNilPrevotes(p)
-    \/ OnRoundCatchup(p)
-    \/ Reward(p)
+    \*\/ OnTimeoutPropose(p)
+    \*\/ OnQuorumOfNilPrevotes(p)
+    \*\/ OnRoundCatchup(p)
 
   
 (**************************** FORK SCENARIOS  ***************************)

@@ -67,30 +67,41 @@ G2 == INSTANCE TendermintAcc_004_draft WITH round <- round2, step <- step2, deci
 
 Init == /\ G1!Init
         /\ G2!Init
-        /\ rational = CHOOSE p \in Corr : TRUE
+        /\ rational \in (Corr \ {Proposer[0]})
            
 InsertProposal(p) == /\ G1!InsertProposal(p)
                      /\ G2!InsertProposal(p)
                      /\ UNCHANGED <<rational>> 
                      
+                     
 UponProposalInPropose(p) ==  /\ G1!UponProposalInPropose(p)
-                             /\ G2!UponProposalInPropose(p)
+                             /\ IF p = rational
+                                THEN UNCHANGED <<vars2>>
+                                ELSE G2!UponProposalInPropose(p)
                              /\ UNCHANGED <<rational>>  
                              
-UponProposalInProposeAndPrevote(p) == /\ G1!UponProposalInProposeAndPrevote(p)
-                                      /\ G2!UponProposalInProposeAndPrevote(p)
-                                      /\ UNCHANGED <<rational>>    
+UponProposalInProposeAndPrevote(p) ==  /\ G1!UponProposalInProposeAndPrevote(p)
+                                       /\ IF p = rational
+                                          THEN UNCHANGED <<vars2>>          
+                                          ELSE G2!UponProposalInProposeAndPrevote(p)
+                                       /\ UNCHANGED <<rational>> 
                                       
 UponQuorumOfPrevotesAny(p) ==  /\ G1!UponQuorumOfPrevotesAny(p)
-                               /\ G2!UponQuorumOfPrevotesAny(p)
-                               /\ UNCHANGED <<rational>>  
+                               /\ IF p = rational
+                                  THEN UNCHANGED <<vars2>>
+                                  ELSE G2!UponQuorumOfPrevotesAny(p)
+                               /\ UNCHANGED <<rational>> 
                                
 UponProposalInPrevoteOrCommitAndPrevote(p) == /\ G1!UponProposalInPrevoteOrCommitAndPrevote(p)
-                                              /\ G2!UponProposalInPrevoteOrCommitAndPrevote(p)
-                                              /\ UNCHANGED <<rational>>  
+                                              /\ IF p = rational
+                                                 THEN UNCHANGED <<vars2>>
+                                                 ELSE G2!UponProposalInPrevoteOrCommitAndPrevote(p)
+                                              /\ UNCHANGED <<rational>>   
                                               
 UponQuorumOfPrecommitsAny(p) ==  /\ G1!UponQuorumOfPrecommitsAny(p)
-                                 /\ G2!UponQuorumOfPrecommitsAny(p)
+                                 /\ IF p = rational
+                                    THEN UNCHANGED <<vars2>>
+                                    ELSE G2!UponQuorumOfPrecommitsAny(p)
                                  /\ UNCHANGED <<rational>>   
                 
                 
@@ -120,7 +131,7 @@ Next == \E p \in Corr:
             \/ UponProposalInPrevoteOrCommitAndPrevote(p)
             \/ UponQuorumOfPrecommitsAny(p)
             \/ UponProposalInPrecommitNoDecision(p)
-            \/ RewardAll(p)
+            \/ RewardVoters(p)
         
 \*Check == IF Termination
 \*         THEN Profit1[Rational]+Merit1[Rational] \geq Profit2[Rational]+Merit2[Rational]
@@ -131,6 +142,6 @@ Equilibrium == IF Termination
                ELSE TRUE
 =============================================================================
 \* Modification History
-\* Last modified Fri May 12 15:05:07 CEST 2023 by 2923277
+\* Last modified Mon May 15 23:32:48 CEST 2023 by 2923277
 \* Last modified Fri Sep 17 00:29:48 CEST 2021 by SHRservice
 \* Created Wed Sep 15 02:47:10 CEST 2021 by SHRservice

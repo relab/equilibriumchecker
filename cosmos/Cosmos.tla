@@ -44,8 +44,8 @@ Id(v) == v
 IsValid(v) == v \in ValidValues
 
 \* the two thresholds that are used in the algorithm
-THRESHOLD1 == T + 1     \* at least one process is not faulty
-THRESHOLD2 == T + 1 \* a quorum when having N > 3 * T
+THRESHOLD1 == (N \div 3) * 2     \* at least one process is not faulty
+THRESHOLD2 == (N \div 3) * 2 \* a quorum when having N > 3 * T
 
 (********************* TYPE ANNOTATIONS FOR APALACHE **************************)
 
@@ -85,7 +85,8 @@ VARIABLES
   profit,         \* we use this variable to indicate the profit of each pricess
   participated, \* we use this variable to indicate whether ot not a process has voted
   rewarded, \* we use this variable to indicate whether ot not a process has been rewarded
-  numParticipated
+  numParticipated,
+  rewarddecided
 
 (* to see a type invariant, check TendermintAccInv3 *)  
  
@@ -97,9 +98,11 @@ vars == <<round, step, decision, lockedValue, lockedRound,
 
 K == 15
 
-R == 30
+R == 3000
 
-Cost == 1
+Cost == 100
+
+Bonus == (50 * R) \div 100
 
 \* @type: (ROUND) => Set(PROPMESSAGE);
 FaultyProposals(r) ==
@@ -172,6 +175,7 @@ Init ==
     /\ profit = [p \in Corr |-> 0]
     /\ participated = [p \in Corr |-> 0]
     /\ rewarded = [p \in Corr |-> FALSE]
+    /\ rewarddecided = [p \in Corr |-> -1]
     /\ lockedValue = [p \in Corr |-> NilValue]
     /\ lockedRound = [p \in Corr |-> NilRound]
     /\ validValue = [p \in Corr |-> NilValue]
@@ -256,7 +260,7 @@ InsertProposal(p) ==
           THEN validValue[p] 
           ELSE v 
       IN BroadcastProposal(p, round[p], proposal, validRound[p])
-  /\ UNCHANGED <<evidence, round, decision, lockedValue, lockedRound,
+  /\ UNCHANGED <<evidence, round, decision, lockedValue, lockedRound, rewarddecided, 
                 validValue, step, validRound, msgsPrevote, msgsPrecommit, profit, participated, rewarded, numParticipated>>
   /\ action' = "InsertProposal"
 
@@ -286,7 +290,7 @@ UponProposalInPropose(p) ==
     /\ step' = [step EXCEPT ![p] = "PREVOTE"]
     /\ profit' = [profit EXCEPT ![p] = profit[p]-Cost]
     /\ participated' = [participated EXCEPT ![p] = participated[p]+1]
-    /\ UNCHANGED <<round, decision, lockedValue, lockedRound,
+    /\ UNCHANGED <<round, decision, lockedValue, lockedRound, rewarddecided, 
                    validValue, validRound, msgsPropose, msgsPrecommit, rewarded, numParticipated>>
     /\ action' = "UponProposalInPropose"
 
@@ -318,7 +322,7 @@ UponProposalInProposeAndPrevote(p) ==
     /\ step' = [step EXCEPT ![p] = "PREVOTE"]
     /\ profit' = [profit EXCEPT ![p] = profit[p]-Cost]
     /\ participated' = [participated EXCEPT ![p] = participated[p]+1]
-    /\ UNCHANGED <<round, decision, lockedValue, lockedRound,
+    /\ UNCHANGED <<round, decision, lockedValue, lockedRound, rewarddecided, 
                    validValue, validRound, msgsPropose, msgsPrecommit, rewarded, numParticipated>>
     /\ action' = "UponProposalInProposeAndPrevote"
                      
@@ -335,7 +339,7 @@ UponQuorumOfPrevotesAny(p) ==
       /\ step' = [step EXCEPT ![p] = "PRECOMMIT"]
       /\ profit' = [profit EXCEPT ![p] = profit[p]-Cost]
       /\ participated' = [participated EXCEPT ![p] = participated[p]+1]
-      /\ UNCHANGED <<round, decision, lockedValue, lockedRound,
+      /\ UNCHANGED <<round, decision, lockedValue, lockedRound, rewarddecided, 
                     validValue, validRound, msgsPropose, msgsPrevote, rewarded, numParticipated>>
       /\ action' = "UponQuorumOfPrevotesAny"
                      
@@ -371,7 +375,7 @@ UponProposalInPrevoteOrCommitAndPrevote(p) ==
       \* lines 42-43
     /\ validValue' = [validValue EXCEPT ![p] = v]
     /\ validRound' = [validRound EXCEPT ![p] = round[p]]
-    /\ UNCHANGED <<round, decision, msgsPropose, msgsPrevote, rewarded, numParticipated>>
+    /\ UNCHANGED <<round, decision, msgsPropose, msgsPrevote, rewarded, numParticipated, rewarddecided>>
     /\ action' = "UponProposalInPrevoteOrCommitAndPrevote"
 
 \* lines 47-48 + 65-67 (onTimeoutPrecommit)
@@ -384,7 +388,7 @@ UponQuorumOfPrecommitsAny(p) ==
       /\ evidence' = MyEvidence \union evidence
       /\ round[p] + 1 \in Rounds
       /\ StartRound(p, round[p] + 1)   
-      /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue,
+      /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue, rewarddecided, 
                     validRound, msgsPropose, msgsPrevote, msgsPrecommit, profit, participated, rewarded, numParticipated>>
       /\ action' = "UponQuorumOfPrecommitsAny"
                      
@@ -412,7 +416,7 @@ UponProposalInPrecommitNoDecision(p) ==
     \* We introduced 'DECIDED' here to prevent the process from changing its decision.
        /\ step' = [step EXCEPT ![p] = "DECIDED"]  
        /\ numParticipated' = Cardinality({x \in Corr : participated[x] > 0})
-       /\ UNCHANGED <<round, lockedValue, lockedRound, validValue,
+       /\ UNCHANGED <<round, lockedValue, lockedRound, validValue, rewarddecided, 
                      validRound, msgsPropose, msgsPrevote, msgsPrecommit, profit, participated, rewarded>>
        /\ action' = "UponProposalInPrecommitNoDecision"
                                                           
@@ -426,7 +430,7 @@ OnTimeoutPropose(p) ==
   /\ step' = [step EXCEPT ![p] = "PREVOTE"]
   /\ profit' = [profit EXCEPT ![p] = profit[p]-Cost]
   /\ participated' = [participated EXCEPT ![p] = participated[p]+1]
-  /\ UNCHANGED <<round, lockedValue, lockedRound, validValue,
+  /\ UNCHANGED <<round, lockedValue, lockedRound, validValue, rewarddecided, 
                 validRound, decision, evidence, msgsPropose, msgsPrecommit, rewarded, numParticipated>>
   /\ action' = "OnTimeoutPropose"
 
@@ -440,7 +444,7 @@ OnQuorumOfNilPrevotes(p) ==
     /\ step' = [step EXCEPT ![p] = "PRECOMMIT"]
     /\ profit' = [profit EXCEPT ![p] = profit[p]-Cost]
     /\ participated' = [participated EXCEPT ![p] = participated[p]+1]
-    /\ UNCHANGED <<round, lockedValue, lockedRound, validValue,
+    /\ UNCHANGED <<round, lockedValue, lockedRound, validValue, rewarddecided, 
                   validRound, decision, msgsPropose, msgsPrevote, rewarded, numParticipated>>
     /\ action' = "OnQuorumOfNilPrevotes"
 
@@ -453,7 +457,7 @@ OnRoundCatchup(p) ==
         /\ Cardinality(Faster) >= THRESHOLD1
         /\ evidence' = MyEvidence \union evidence
         /\ StartRound(p, r)
-        /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue, rewarded,
+        /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue, rewarded, rewarddecided, 
                       validRound, msgsPropose, msgsPrevote, msgsPrecommit, profit, participated, numParticipated>>
         /\ action' = "OnRoundCatchup"
 
@@ -470,10 +474,12 @@ RewardAll(p) ==
   /\ rewarded[p] /= TRUE
   /\ step[p] = "DECIDED"
   /\ \A pr \in Corr: step[pr] = "DECIDED"
-  /\ profit' = [profit EXCEPT ![p] = profit[p] + (R \div N)]
+  /\ IF p = Proposer[round[p]]
+     THEN profit' = [profit EXCEPT ![p] = profit[p] + ((R \div N) + Bonus)]
+     ELSE profit' = [profit EXCEPT ![p] = profit[p] + (R \div N)]
   /\ rewarded' = [rewarded EXCEPT ![p] = TRUE]
   /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue,
-                  validRound, msgsPropose, msgsPrevote, msgsPrecommit,
+                  validRound, msgsPropose, msgsPrevote, msgsPrecommit, rewarddecided,
                   evidence, action, round, participated, step, numParticipated>>
                       
 RewardVoters(p) ==
@@ -481,13 +487,46 @@ RewardVoters(p) ==
   /\ step[p] = "DECIDED"
   /\ \A pr \in Corr: step[pr] = "DECIDED"
   /\ \/ /\ participated[p] > 0 
-        /\ profit' = [profit EXCEPT ![p] = profit[p] + (R \div numParticipated)]
+        /\ /\ IF p = Proposer[round[p]]
+              THEN profit' = [profit EXCEPT ![p] = profit[p] + ((R \div numParticipated) + ((numParticipated - THRESHOLD1) * (Bonus \div (N - THRESHOLD1))))]
+              ELSE profit' = [profit EXCEPT ![p] = profit[p] + (R \div numParticipated)]
      \/ /\ participated[p] = 0 
         /\ UNCHANGED <<profit>>
   /\ rewarded' = [rewarded EXCEPT ![p] = TRUE]
   /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue,
-                      validRound, msgsPropose, msgsPrevote, msgsPrecommit,
+                      validRound, msgsPropose, msgsPrevote, msgsPrecommit, rewarddecided, 
                       evidence, action, round, participated, step, numParticipated>>
+                      
+RewardVotersByLeader(p, q, dec) == 
+  /\ rewarddecided[q] = -1
+  /\ step[q] = "DECIDED"
+  /\ \A pr \in Corr: step[pr] = "DECIDED"
+  /\ p = Proposer[round[p]]
+  /\ IF /\ participated[q] > 0 /\ dec = TRUE
+     THEN rewarddecided' = [rewarddecided EXCEPT ![q] = 1]
+     ELSE rewarddecided' = [rewarddecided EXCEPT ![q] = 0]
+  /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue,
+                      validRound, msgsPropose, msgsPrevote, msgsPrecommit, rewarded, 
+                      evidence, action, round, participated, step, numParticipated, profit>>
+                      
+Reward(p) == 
+  /\ \A pr \in Corr: step[pr] = "DECIDED"
+  /\ rewarded[p] /= TRUE
+  /\ \A pr \in Corr: rewarddecided[pr] /= -1
+  /\ IF rewarddecided[p] = 1
+     THEN LET count == Cardinality({pr \in Corr: rewarddecided[pr] > 0})
+          IN /\ IF count < THRESHOLD1
+                THEN UNCHANGED <<profit>>
+                ELSE /\ IF p = Proposer[round[p]]
+                        THEN profit' = [profit EXCEPT ![p] = profit[p] + ((R \div count) + ((count - THRESHOLD1) * (Bonus \div (N - THRESHOLD1))))]
+                        ELSE profit' = [profit EXCEPT ![p] = profit[p] + (R \div count)]
+     ELSE UNCHANGED <<profit>>
+ /\ rewarded' = [rewarded EXCEPT ![p] = TRUE]
+ /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue,
+                      validRound, msgsPropose, msgsPrevote, msgsPrecommit, rewarddecided, 
+                      evidence, action, round, participated, step, numParticipated>>
+    
+  
                      
  
 Next ==
@@ -499,7 +538,8 @@ Next ==
     \/ UponProposalInPrevoteOrCommitAndPrevote(p)
     \/ UponQuorumOfPrecommitsAny(p)
     \/ UponProposalInPrecommitNoDecision(p)
-    \/ RewardVoters(p)
+    \/ \E q \in Corr: RewardVotersByLeader(p, q, TRUE)
+    \/ Reward(p)
     \* the actions below are not essential for safety, but added for completeness
     \*\/ OnTimeoutPropose(p)
     \*\/ OnQuorumOfNilPrevotes(p)
@@ -617,5 +657,5 @@ NeverUndecidedInMaxRound ==
 
 =============================================================================
 \* Modification History
-\* Last modified Tue Jun 06 11:17:55 CEST 2023 by 2923277
+\* Last modified Sun Jun 11 15:58:29 CEST 2023 by 2923277
 \* Created Wed May 31 13:30:39 CEST 2023 by 2923277

@@ -1,7 +1,7 @@
 ------------------------------- MODULE Cosmos -------------------------------
 
 
-EXTENDS Integers, FiniteSets, typedefs
+EXTENDS Integers, FiniteSets, typedefs, TLC, Reals
 
 (********************* PROTOCOL PARAMETERS **********************************)
 CONSTANTS
@@ -20,7 +20,8 @@ CONSTANTS
   \* @type: ROUND;    
     MaxRound,      \* the maximal round number
   \* @type: ROUND -> PROCESS;
-    Proposer       \* the proposer function from Rounds to AllProcs
+    Proposer,       \* the proposer function from Rounds to AllProcs
+    Weight
 
 ASSUME(N = Cardinality(Corr \union Faulty))
 
@@ -87,7 +88,7 @@ VARIABLES
   rewarded, \* we use this variable to indicate whether ot not a process has been rewarded
   numParticipated,
   rewarddecided
-
+  
 (* to see a type invariant, check TendermintAccInv3 *)  
  
 \* a handy definition used in UNCHANGED
@@ -102,7 +103,7 @@ R == 3000
 
 Cost == 100
 
-Bonus == (50 * R) \div 100
+Bonus == (5 * R) \div 100
 
 \* @type: (ROUND) => Set(PROPMESSAGE);
 FaultyProposals(r) ==
@@ -233,7 +234,7 @@ BroadcastPrecommit(pSrc, pRound, pId) ==
     ]
   IN
   msgsPrecommit' = [msgsPrecommit EXCEPT ![pRound] = msgsPrecommit[pRound] \union {newMsg}]
-
+  
 
 (********************* PROTOCOL TRANSITIONS ******************************)
 \* lines 12-13
@@ -415,8 +416,11 @@ UponProposalInPrecommitNoDecision(p) ==
     \* The original algorithm does not have 'DECIDED', but it increments the height.
     \* We introduced 'DECIDED' here to prevent the process from changing its decision.
        /\ step' = [step EXCEPT ![p] = "DECIDED"]  
-       /\ numParticipated' = Cardinality({x \in Corr : participated[x] > 0})
-       /\ UNCHANGED <<round, lockedValue, lockedRound, validValue, rewarddecided, 
+       \*/\ numParticipated' = Cardinality({x \in Corr : participated[x] > 0})
+       \*/\ IF participated [p] > 0
+       \*   THEN numParticipated' = numParticipated + Weight[p]
+       \*   ELSE UNCHANGED <<numParticipated>>
+       /\ UNCHANGED <<round, lockedValue, lockedRound, validValue, rewarddecided, numParticipated,
                      validRound, msgsPropose, msgsPrevote, msgsPrecommit, profit, participated, rewarded>>
        /\ action' = "UponProposalInPrecommitNoDecision"
                                                           
@@ -503,23 +507,23 @@ RewardVotersByLeader(p, q, dec) ==
   /\ \A pr \in Corr: step[pr] = "DECIDED"
   /\ p = Proposer[round[p]]
   /\ IF /\ participated[q] > 0 /\ dec = TRUE
-     THEN rewarddecided' = [rewarddecided EXCEPT ![q] = 1]
-     ELSE rewarddecided' = [rewarddecided EXCEPT ![q] = 0]
+     THEN rewarddecided' = [rewarddecided EXCEPT ![q] = 1] /\ numParticipated' = numParticipated + Weight[q]
+     ELSE rewarddecided' = [rewarddecided EXCEPT ![q] = 0] /\ UNCHANGED <<numParticipated>>
   /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue,
                       validRound, msgsPropose, msgsPrevote, msgsPrecommit, rewarded, 
-                      evidence, action, round, participated, step, numParticipated, profit>>
+                      evidence, action, round, participated, step, profit>>
                       
 Reward(p) == 
   /\ \A pr \in Corr: step[pr] = "DECIDED"
   /\ rewarded[p] /= TRUE
   /\ \A pr \in Corr: rewarddecided[pr] /= -1
   /\ IF rewarddecided[p] = 1
-     THEN LET count == Cardinality({pr \in Corr: rewarddecided[pr] > 0})
-          IN /\ IF count < THRESHOLD1
+     THEN LET count == numParticipated
+          IN /\ IF count < 66
                 THEN UNCHANGED <<profit>>
                 ELSE /\ IF p = Proposer[round[p]]
-                        THEN profit' = [profit EXCEPT ![p] = profit[p] + ((R \div count) + ((count - THRESHOLD1) * (Bonus \div (N - THRESHOLD1))))]
-                        ELSE profit' = [profit EXCEPT ![p] = profit[p] + (R \div count)]
+                        THEN profit' = [profit EXCEPT ![p] = profit[p] + (((R \div count) * Weight[p]) + (Bonus * ((count - 66) \div (100 - 66))))]
+                        ELSE profit' = [profit EXCEPT ![p] = profit[p] + ((R \div count)  * Weight[p])]
      ELSE UNCHANGED <<profit>>
  /\ rewarded' = [rewarded EXCEPT ![p] = TRUE]
  /\ UNCHANGED <<decision, lockedValue, lockedRound, validValue,
@@ -657,5 +661,5 @@ NeverUndecidedInMaxRound ==
 
 =============================================================================
 \* Modification History
-\* Last modified Sun Jun 11 15:58:29 CEST 2023 by 2923277
+\* Last modified Mon Jun 12 13:21:35 CEST 2023 by 2923277
 \* Created Wed May 31 13:30:39 CEST 2023 by 2923277
